@@ -1,0 +1,39 @@
+name: Practical 7 - Docker Build and Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Train model
+        run: python train_model.py
+
+      - name: Run application tests
+        run: python -m unittest test_app -v
+
+      - name: Build Docker image
+        run: docker build -t student-result-api:latest .
+
+      - name: Test Docker image
+        run: docker run --rm student-result-api:latest python -c "import app; print('Docker application test passed')"
