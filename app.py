@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import joblib
@@ -5,6 +6,14 @@ import pandas as pd
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
+
+# Configure application logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+logger = logging.getLogger(__name__)
 
 MODEL_PATH = Path("student_result_model.pkl")
 
@@ -18,15 +27,19 @@ FEATURES = [
 
 def load_model():
     if not MODEL_PATH.exists():
+        logger.error("Model file not found")
         raise FileNotFoundError(
             "Model not found. Run train_model.py first."
         )
 
+    logger.info("Loading student result model")
     return joblib.load(MODEL_PATH)
 
 
 @app.get("/")
 def health_check():
+    logger.info("Health check requested")
+
     return jsonify({
         "status": "ok",
         "service": "student-result-prediction"
@@ -35,9 +48,13 @@ def health_check():
 
 @app.post("/predict")
 def predict():
+    logger.info("Prediction request received")
+
     data = request.get_json(silent=True)
 
     if not data:
+        logger.warning("Prediction request did not contain JSON data")
+
         return jsonify({
             "error": "JSON request body is required"
         }), 400
@@ -48,27 +65,51 @@ def predict():
     ]
 
     if missing_fields:
+        logger.warning(
+            "Missing required fields: %s",
+            missing_fields
+        )
+
         return jsonify({
             "error": "Missing required fields",
             "missing_fields": missing_fields
         }), 400
 
-    sample = pd.DataFrame([{
-        feature: data[feature]
-        for feature in FEATURES
-    }])
+    try:
+        sample = pd.DataFrame([{
+            feature: data[feature]
+            for feature in FEATURES
+        }])
 
-    model = load_model()
+        model = load_model()
 
-    prediction_code = int(model.predict(sample)[0])
+        prediction_code = int(model.predict(sample)[0])
+        prediction = "PASS" if prediction_code == 1 else "FAIL"
 
-    prediction = "PASS" if prediction_code == 1 else "FAIL"
+        logger.info(
+            "Prediction completed successfully: %s",
+            prediction
+        )
 
-    return jsonify({
-        "prediction": prediction,
-        "prediction_code": prediction_code
-    })
+        return jsonify({
+            "prediction": prediction,
+            "prediction_code": prediction_code
+        })
+
+    except Exception:
+        logger.exception("Prediction failed")
+
+        return jsonify({
+            "error": "Prediction failed"
+        }), 500
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    import os
+
+    port = int(os.environ.get("PORT", 5000))
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
