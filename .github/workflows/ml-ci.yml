@@ -1,19 +1,18 @@
-name: Student Result ML CI
+
+name: Practical 5 - Continuous Delivery
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  train-and-test:
+  build-test-release:
     runs-on: ubuntu-latest
 
     steps:
@@ -25,17 +24,33 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
-
-      - name: Install ML dependencies
-        run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
 
       - name: Train student result model
         run: python train_model.py
 
-      - name: Check ML quality gate
+      - name: Run model quality gate
         run: python quality_gate.py
 
       - name: Run ML pipeline tests
-        run: python -m unittest test_ml_pipeline.py -v
+        run: python -m unittest test_ml_pipeline -v
+
+      - name: Run Flask API tests
+        run: python -m unittest test_app -v
+
+      - name: Prepare release candidate
+        run: |
+          mkdir -p student-result-ml-release
+          cp app.py student-result-ml-release/
+          cp student_result_model.pkl student-result-ml-release/
+          cp metrics.json student-result-ml-release/
+          cp requirements.txt student-result-ml-release/
+          printf "Run python app.py to start the API\n" > student-result-ml-release/DEPLOYMENT.txt
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-result-ml-release
+          path: student-result-ml-release/
+          retention-days: 7
